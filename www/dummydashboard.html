@@ -24,17 +24,17 @@
 
 <div class="container mt-3">
     <h2 class="display-6 py-2">Dashboard</h2>
-    <!-- <h3 class="me-2">Name: <span id="name" class="me-2 font-italic" type="text" name="name"></span></h1> -->
     <div class="d-flex justify-content-start">
         <div class="d-flex align-items-center me-3">
-            <h3 class="me-2">Name:</h3>
-            <input id="name" class="form-control me-2" type="text" name="name">
+            <h3 class="me-2">Name: <span id="name" class="me-2 font-italic" type="text" name="name"></span></h1>
+            <!-- <h3 class="me-2">Name:</h3>
+            <input id="name" class="form-control me-2" type="text" name="name"> -->
         </div>
         <div class="d-flex align-items-center me-3">
             <h3 class="me-2">Date:</h3>
             <input id="date" class="form-control me-2" type="date" name="date">
         </div>
-        <button class="btn btn-primary" onclick="fetchDetails()">Submit</button>
+        <!-- <button class="btn btn-primary" onclick="fetchDetails()">Submit</button> -->
     </div>
 
     <div class="container">
@@ -47,8 +47,7 @@
                     <th scope="col">Working Hours</th>
                 </tr>
             </thead>
-            <tbody id="data">
-            </tbody>
+            <tbody id="data"></tbody>
         </table>
         <table class="table table-striped  mt-3">
             <tr>
@@ -67,38 +66,45 @@
     </div>
 
     <div class="container pt-4" id="reports-table" style="display: none;">
+        <div class="d-flex align-items-center me-3">
+            <h2>Check-In Reports</h2>
+        </div>
         <div class="d-flex justify-content-between">
-            <div class="d-flex align-items-center me-3">
-                <h2>Reports</h2>
+            <div class="d-flex d-inline-block me-3">
+                <h5 class="me-2">Employee Name:</h5>
+                <!-- <select id="reportee-select" class="form-control col-6 me-2" onchange="fetchSelectedReport()"> -->
+                <select id="reportee-select" class="form-control col-6 me-2">
+                    <option value="">-- Select --</option>
+                </select>
             </div>
-            <div class="d-flex align-items-center me-3">
-                <h4 class="me-2">Date:</h4>
+            <div class="d-flex d-inline-block me-3">
+                <h5 class="me-2">Date:</h5>
                 <input id="report-date" class="form-control me-2" type="date" name="report-date">
+                <button class="btn btn-primary" onclick="fetchSelectedReport()">Submit</button>
             </div>
         </div>
         <div class="mt-2" id="reportNames-data"></div>
     </div>
-    
-
 </div>
 
 <script>
-
 document.addEventListener("DOMContentLoaded", function () {
     fetchCurrentDate();
+    fetchDetails()
 });
 
+document.getElementById("date").addEventListener("change", fetchDetails);
 
-document.getElementById("report-date").addEventListener("change", fetchDetails);
+
 
 async function fetchCurrentDate() {
     try {
-        const response = await fetch('/api/method/attendence.api.get_date'); // Call the API
-        const result = await response.json();
+        const dateResponse = await fetch('/api/method/attendence.api.get_date');
+        const dateResult = await dateResponse.json();
         
-        if (result.message) {
-            document.getElementById("date").value = result.message; // Set the date input field
-            document.getElementById("report-date").value = result.message;
+        if (dateResult.message) {
+            document.getElementById("date").value = dateResult.message;
+            document.getElementById("report-date").value = dateResult.message;
         }
     } catch (error) {
         console.error("Error fetching date:", error);
@@ -107,15 +113,37 @@ async function fetchCurrentDate() {
 
 async function fetchDetails() {
     try {
-        const givenEmployee = document.getElementById("name").value.toUpperCase();
+
+        const userResponse = await fetch("/api/method/frappe.auth.get_logged_user");
+        const userData = await userResponse.json();
+        const userEmail = userData.message;
+        console.log("user",userEmail);
+        const nameResponse = await fetch(`/api/method/attendence.api.get_user_details?email=${userEmail}`);
+        const nameResult = await nameResponse.json();
+        const employeeName = nameResult.message.full_name;
+        console.log("user name",employeeName);
+
+        document.getElementById("name").innerHTML = employeeName;
+
+        const givenEmployee = employeeName;
         const givenDate = document.getElementById("date").value;
-        
-        const reportDate = givenDate;
-        console.log("Employee:", givenEmployee, "Date:", givenDate);
+
+        // validation for date
+        const today = new Date().toISOString().split('T')[0];
+        if (givenDate > today) {
+            alert("Given date cannot be greater than the present date");
+            window.location.reload();
+        }
+
+        if (!givenEmployee || !givenDate) {
+            console.error("Missing employee name or date");
+            return;
+        }
+
+        console.log("Fetching data for:", givenEmployee, "on", givenDate);
 
         const response = await fetch(`/api/method/attendence.api.get_attendance?employee_name=${givenEmployee}&date=${givenDate}`);
         const result = await response.json();
-        console.log("employee", result);
 
         if (!result.message || !result.message.attendance_sessions) {
             console.error("Invalid data structure", result);
@@ -123,15 +151,12 @@ async function fetchDetails() {
         }
 
         const attendanceSessions = result.message.attendance_sessions;
-        console.log("attendanceSessions", attendanceSessions);
         const totalWorkingHours = result.message.working_hours;
-        console.log("Total Working Hours:", totalWorkingHours);
 
-        // Clear existing table data
         document.getElementById("data").innerHTML = "";
         document.getElementById("reportNames-data").innerHTML = "";
+        document.getElementById("reportee-select").innerHTML = '<option value="">Select Employee</option>';
 
-        // Populate attendance sessions
         attendanceSessions.forEach((sessionData, index) => {
             const sessionKey = Object.keys(sessionData)[0];
             const session = sessionData[sessionKey];
@@ -139,72 +164,120 @@ async function fetchDetails() {
             document.getElementById("data").innerHTML += `
                 <tr>
                     <td>${index + 1}</td>
-                    <td>${session.in_time}</td>
-                    <td>${session.out_time}</td>
-                    <td>${session.working_hours}</td>
+                    <td>${session.in_time || "-"}</td>
+                    <td>${session.out_time || "-"}</td>
+                    <td>${session.working_hours || "0:00:00"}</td>
                 </tr>`;
         });
 
-        document.getElementById("total-working-hours").textContent = totalWorkingHours;
 
-        // Calculate daily average
+        const weeklyResponse = await fetch(`/api/method/attendence.api.get_weekly_average?employee_name=${givenEmployee}&current_date=${givenDate}`);
+        const weeklyResult = await weeklyResponse.json();
+        const reportWeeklyAvg = weeklyResult.message.weekly_avg_hh_mm;
+        console.log("reportWeeklyAvg",reportWeeklyAvg);
+
+        document.getElementById("total-working-hours").textContent = totalWorkingHours;
         const [hours, minutes] = totalWorkingHours.split(":");
         document.getElementById("daily-avg").textContent = `${hours}.${minutes.padStart(2, "0")}`;
 
-        document.getElementById("weekly-avg").textContent = 0;
-        document.getElementById("monthly-avg").textContent = 0;
+        document.getElementById("weekly-avg").textContent = reportWeeklyAvg || "0";
+        document.getElementById("monthly-avg").textContent = "0";
 
-        // Populate Reports Table (if report_to exist)
-        const reportNames = result.message.report_names;
-        console.log("report-names",reportNames);
+        populateReportDropdown(result.message.report_names);
 
-        fetchReports(reportNames);
-
-    } 
-    catch (error) {
+    } catch (error) {
         console.error("Error fetching attendance data:", error);
     }
 }
 
-async function fetchReports(reportNames) {
+function populateReportDropdown(reportNames, level = 0, parent = "reportee-select") {
+    if (!reportNames || reportNames.length === 0) {
+        document.getElementById("reports-table").style.display = "none";
+        return;
+    }
+
+    document.getElementById("reports-table").style.display = "block";
+
+    const reporteeSelect = document.getElementById(parent);
+    reportNames.forEach((employee) => {
+        let option = document.createElement("option");
+        option.value = employee.employee;
+        option.textContent = "--".repeat(level) + " " + employee.employee;
+        reporteeSelect.appendChild(option);
+
+        if (employee.subordinates.length > 0) {
+            populateReportDropdown(employee.subordinates, level + 1, parent);
+        }
+    });
+}
+
+async function fetchSelectedReport() {
     try {
+        const reportEmployee = document.getElementById("reportee-select").value;
         const reportDate = document.getElementById("report-date").value;
 
-        console.log("Fetching reports for date:", reportDate);
-
-        if (!reportNames || reportNames.length === 0) {
-            document.getElementById("reports-table").style.display = "none";
+        if (!reportEmployee) {
+            document.getElementById("reportNames-data").innerHTML = "";
+            alert("Please select an employee.");
             return;
         }
 
-        document.getElementById("reports-table").style.display = "block";
-        document.getElementById("reportNames-data").innerHTML = "";
+        // validation for date
+        const today = new Date().toISOString().split('T')[0];
+        if (reportDate > today) {
+            alert("Given date cannot be greater than the present date");
+            window.location.reload();
+        }
 
-        for (const employee of reportNames) {
-            const reportEmployee = employee.employee;
-            console.log("Fetching report data for:", reportEmployee);
+        if (!reportEmployee || !reportDate) {
+            console.error("Missing employee name or date");
+            return;
+        }
 
-            const response = await fetch(`/api/method/attendence.api.get_attendance?employee_name=${reportEmployee}&date=${reportDate}`);
-            const reportResult = await response.json();
-            console.log(reportResult);
+        console.log("Fetching report data for:", reportEmployee, "on", reportDate);
 
-            if (!reportResult.message || !reportResult.message.attendance_sessions) continue;
+        const response = await fetch(`/api/method/attendence.api.get_attendance?employee_name=${reportEmployee}&date=${reportDate}`);
+        const reportResult = await response.json();
+        console.log("sub-result",reportResult);
 
-            let sessionRows = reportResult.message.attendance_sessions.map((sessionData, index) => {
-                const sessionKey = Object.keys(sessionData)[0];
-                const session = sessionData[sessionKey];
-                return `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${session.in_time || "-"}</td>
-                        <td>${session.out_time || "-"}</td>
-                        <td>${session.working_hours || "0:00:00"}</td>
-                    </tr>`;
-            }).join("");
+        const weeklyResponse = await fetch(`/api/method/attendence.api.get_weekly_average?employee_name=${reportEmployee}&current_date=${reportDate}`);
+        const weeklyResult = await weeklyResponse.json();
+        console.log("weekly-result",weeklyResult);
 
-            document.getElementById("reportNames-data").innerHTML += `
-                <h4>${reportEmployee}</h4>
-                <table class="table table-bordered border-3 mt-3">
+
+        if (!reportResult.message || !reportResult.message.attendance_sessions) {
+            document.getElementById("reportNames-data").innerHTML = "<p>No attendance data found.</p>";
+            return;
+        }
+
+        let sessionRows = reportResult.message.attendance_sessions.map((sessionData, index) => {
+            const sessionKey = Object.keys(sessionData)[0];
+            const session = sessionData[sessionKey];
+            return `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${session.in_time || "-"}</td>
+                    <td>${session.out_time || "-"}</td>
+                    <td>${session.working_hours || "0:00:00"}</td>
+                </tr>`;
+        }).join("");
+
+        const reportTotalWorkingHours = reportResult.message.working_hours;
+        console.log("Total Working Hours:", reportTotalWorkingHours);
+        const [reportHours, reportMinutes] = reportTotalWorkingHours.split(":");
+        const reportDailyAvg = `${reportHours}.${reportMinutes.padStart(2, "0")}`;
+
+        const reportWeeklyAvg = weeklyResult.message.weekly_avg_hh_mm;
+        let avgRows = `
+            <tr>
+                <td>${reportTotalWorkingHours}</td>
+                <td>${reportDailyAvg}</td>
+                <td>${reportWeeklyAvg}</td>
+                <td>0</td>
+            </tr>`;
+
+        document.getElementById("reportNames-data").innerHTML = `<h4>${reportEmployee}</h4>
+            <table class="table table-bordered border-3 mt-3">
                     <thead>
                         <tr>
                             <th scope="col">Session</th>
@@ -214,18 +287,22 @@ async function fetchReports(reportNames) {
                         </tr>
                     </thead>
                     <tbody>${sessionRows}</tbody>
-                </table>`;
-
-
-        }
-
-        
+            </table>
+            <table class="table table-striped  mt-3">
+                <thead>
+                    <tr>
+                        <th>Total Working Hours</th>
+                        <th>Daily Average </th>
+                        <th>Weekly Average </th>
+                        <th>Monthly Average </th>
+                    </tr>
+                </thead>
+                <tbody>${avgRows}</tbody>
+            </table>`;
 
     } catch (error) {
         console.error("Error fetching report data:", error);
     }
 }
-
 </script>
 {% endblock %}
-

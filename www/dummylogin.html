@@ -77,7 +77,7 @@
 
             if (data.message === "Logged In") {
                 localStorage.setItem("session_user", email);
-                window.location.href = "/project-dashboard";
+                window.location.href = "/dummydashboard";
             } else {
                 alertBox.classList.remove("d-none");
                 alertBox.innerText = data.message;
