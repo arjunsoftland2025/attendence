@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import get_datetime, today, add_days, getdate
+from frappe.utils import add_days, get_datetime, today, getdate, add_months, formatdate
 from datetime import timedelta
 
 @frappe.whitelist()
@@ -194,4 +194,69 @@ def get_weekly_average(employee_name, current_date):
         "weekly_avg_hh_mm_ss": avg_hh_mm_ss,  
         "weekly_avg_hh_mm": avg_hh_mm,  
         "days_considered": valid_days
+    }
+
+@frappe.whitelist(allow_guest=True)
+def get_monthly_average(employee_name, current_date):
+    current_date = getdate(current_date)  # Convert string date to datetime object
+    
+    # Get the first and last date of the previous month
+    first_day_of_prev_month = add_months(current_date.replace(day=1), -1)
+    first_day_of_current_month = current_date.replace(day=1)
+    # last_day_of_prev_month = first_day_of_current_month - timedelta(days=1)
+    # print(f"last_day_of_prev_month: {last_day_of_prev_month}")
+    
+    total_seconds = 0
+    valid_days = 0  # Track number of valid working days
+    
+    # Fetch all valid dates with check-in data
+    query = """
+        SELECT DISTINCT DATE(`time`) as work_date
+        FROM `tabEmployee Checkin`
+        WHERE `employee` = %s
+        AND `time` BETWEEN %s AND %s
+    """
+    valid_dates = frappe.db.sql(query, (employee_name, first_day_of_prev_month, first_day_of_current_month), as_dict=True)
+    # print(f"Length of valid_dates: {len(valid_dates)}")
+
+    for record in valid_dates:
+        work_date = record["work_date"]
+        
+        # Fetch attendance data for the date
+        attendance = get_attendance(employee_name, str(work_date))
+        if attendance.get("error"):  
+            print(f"Skipping {work_date} due to error: {attendance.get('error')}")
+            continue  # Skip if no attendance data
+        
+        working_hours = attendance["working_hours"]
+        hours, minutes, seconds = map(int, working_hours.split(":"))
+        daily_seconds = (hours * 3600) + (minutes * 60) + seconds
+
+        total_seconds += daily_seconds
+        valid_days += 1
+
+    # print("Valid dates from SQL:", valid_dates)
+    # print("\n")
+    # print("Processed dates in API:", valid_days)
+    # If no valid days found, return an error
+    if valid_days == 0:
+        return {"error": "No working days found for monthly average calculation."}
+
+    # Calculate the average in seconds
+    avg_seconds = total_seconds // valid_days  
+    avg_hours = avg_seconds // 3600
+    avg_minutes = (avg_seconds % 3600) // 60
+    avg_seconds_remaining = avg_seconds % 60
+
+    # Format output
+    avg_hh_mm_ss = f"{avg_hours}:{str(avg_minutes).zfill(2)}:{str(avg_seconds_remaining).zfill(2)}"
+    avg_hh_mm = f"{avg_hours}.{str(avg_minutes).zfill(2)}"
+
+    
+
+    return {
+        "monthly_avg_hh_mm_ss": avg_hh_mm_ss,
+        "monthly_avg_hh_mm": avg_hh_mm,
+        "days_considered": valid_days,
+        "month": formatdate(first_day_of_prev_month, "MMMM YYYY")  # Format as "March 2024"
     }

@@ -73,7 +73,7 @@
             <div class="d-flex d-inline-block me-3">
                 <h5 class="me-2">Employee Name:</h5>
                 <!-- <select id="reportee-select" class="form-control col-6 me-2" onchange="fetchSelectedReport()"> -->
-                <select id="reportee-select" class="form-control col-6 me-2">
+                <select id="reportee-select" class="form-control col-5 me-2">
                     <option value="">-- Select --</option>
                 </select>
             </div>
@@ -173,15 +173,20 @@ async function fetchDetails() {
 
         const weeklyResponse = await fetch(`/api/method/attendence.api.get_weekly_average?employee_name=${givenEmployee}&current_date=${givenDate}`);
         const weeklyResult = await weeklyResponse.json();
-        const reportWeeklyAvg = weeklyResult.message.weekly_avg_hh_mm;
-        console.log("reportWeeklyAvg",reportWeeklyAvg);
+        const weeklyAvg = weeklyResult.message.weekly_avg_hh_mm;
+        console.log("reportWeeklyAvg",weeklyAvg);
+
+        const monthlyResponse = await fetch(`/api/method/attendence.api.get_monthly_average?employee_name=${givenEmployee}&current_date=${givenDate}`);
+        const monthlyResult = await monthlyResponse.json();
+        const monthlyAvg = monthlyResult.message.monthly_avg_hh_mm;
+        console.log("monthly-result",monthlyResult);
 
         document.getElementById("total-working-hours").textContent = totalWorkingHours;
         const [hours, minutes] = totalWorkingHours.split(":");
         document.getElementById("daily-avg").textContent = `${hours}.${minutes.padStart(2, "0")}`;
 
-        document.getElementById("weekly-avg").textContent = reportWeeklyAvg || "0";
-        document.getElementById("monthly-avg").textContent = "0";
+        document.getElementById("weekly-avg").textContent = weeklyAvg || "0.00";
+        document.getElementById("monthly-avg").textContent = monthlyAvg || "0.00";
 
         populateReportDropdown(result.message.report_names);
 
@@ -240,9 +245,13 @@ async function fetchSelectedReport() {
         const reportResult = await response.json();
         console.log("sub-result",reportResult);
 
-        const weeklyResponse = await fetch(`/api/method/attendence.api.get_weekly_average?employee_name=${reportEmployee}&current_date=${reportDate}`);
-        const weeklyResult = await weeklyResponse.json();
-        console.log("weekly-result",weeklyResult);
+        const reportWeeklyResponse = await fetch(`/api/method/attendence.api.get_weekly_average?employee_name=${reportEmployee}&current_date=${reportDate}`);
+        const reportWeeklyResult = await reportWeeklyResponse.json();
+        console.log("reportWeekly-result",reportWeeklyResult);
+
+        const reportMonthlyResponse = await fetch(`/api/method/attendence.api.get_monthly_average?employee_name=${reportEmployee}&current_date=${reportDate}`);
+        const reportMonthlyResult = await reportMonthlyResponse.json();
+        console.log("reportMonthly-result",reportMonthlyResult);
 
 
         if (!reportResult.message || !reportResult.message.attendance_sessions) {
@@ -267,13 +276,16 @@ async function fetchSelectedReport() {
         const [reportHours, reportMinutes] = reportTotalWorkingHours.split(":");
         const reportDailyAvg = `${reportHours}.${reportMinutes.padStart(2, "0")}`;
 
-        const reportWeeklyAvg = weeklyResult.message.weekly_avg_hh_mm;
+        const reportWeeklyAvg = reportWeeklyResult.message.weekly_avg_hh_mm  || "0:00";
+
+        const reportMonthlyAvg = reportMonthlyResult.message.monthly_avg_hh_mm || "0:00";
+
         let avgRows = `
             <tr>
                 <td>${reportTotalWorkingHours}</td>
                 <td>${reportDailyAvg}</td>
                 <td>${reportWeeklyAvg}</td>
-                <td>0</td>
+                <td>${reportMonthlyAvg}</td>
             </tr>`;
 
         document.getElementById("reportNames-data").innerHTML = `<h4>${reportEmployee}</h4>
@@ -304,5 +316,6 @@ async function fetchSelectedReport() {
         console.error("Error fetching report data:", error);
     }
 }
+
 </script>
 {% endblock %}
